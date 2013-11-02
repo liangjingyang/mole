@@ -17,7 +17,7 @@
 -behaviour(gen_server).
 
 -record(client_data, {id, aim_id, wan, lan, conn, hand}).
--define(SERVER_IP, {106,186,30,200}).
+-define(SERVER_IP, {192.168.1.1}).
 -define(SERVER_PORT, 6666).
 
 start(Id, AimId, Port) ->
