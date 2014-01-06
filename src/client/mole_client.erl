@@ -39,7 +39,7 @@ handle_info({udp, _Socket, Ip, Port, <<?LAN_CONN:8>>}, State) ->
             State2 = State;
         _His ->
             State2 = State#state{conn = {Ip, Port}},
-            io:format("connect from lan lan lan, ~w~n", [{Ip, Port}]), 
+            io:format("recv connect from lan, ~w~n", [{Ip, Port}]), 
             erlang:send_after(3 * 1000, self(), heartbeat)
     end,
     {noreply, State2};
@@ -53,7 +53,7 @@ handle_info({udp, _Socket, Ip, Port, <<?WAN_CONN:8>>}, State) ->
             case State#state.conn of 
                 undefined ->
                     State2 = State#state{conn = {Ip, Port}},
-                    io:format("connect from wan wan wan, ~w~n", [{Ip, Port}]), 
+                    io:format("recv connect from wan, ~w~n", [{Ip, Port}]), 
                     erlang:send_after(3 * 1000, self(), heartbeat);
                 _ ->
                     State2 = State 
@@ -64,15 +64,15 @@ handle_info({udp, _Socket, Ip, Port, <<?WAN_CONN:8>>}, State) ->
 %% server response
 handle_info({udp, _Socket, _Ip, _Port, <<?SERVER_RES:8, HisKey:128, I1:8, I2:8, I3:8, I4:8, WanPort:16, Packet/binary>>}, State) ->
     WanIp = {I1, I2, I3, I4},
-    io:format("begin make hole with ~w~n", [WanIp]),
     LanArgs = binary_to_term(Packet),
+    io:format("begin to make hole with ~w~n", [HisKey]),
     p2p_conn(State#state.socket, {WanIp, WanPort, LanArgs}),
     erlang:send_after(2* 1000, self(), p2p_conn),
     {noreply, State#state{his_net = {WanIp, WanPort, LanArgs}, his_key = HisKey}};
 
 
-handle_info({udp, _Socket, Ip, _Port, Packet}, State) ->
-    io:format("normal ip:~p, packet: ~p~n", [Ip, Packet]),
+handle_info({udp, _Socket, Ip, Port, <<?P2P_DATA:8, Packet/binary>>}, State) ->
+    io:format("recv p2p data from ip:~p port:~p packet: ~p~n", [Ip, Port, Packet]),
     {noreply, State};
 
 %% server request
@@ -144,9 +144,9 @@ get_ip_from_os(Cmd) ->
 
 p2p_conn(Socket, {WanIp, WanPort, {LanIpList, LanPort}}) ->
     gen_udp:send(Socket, WanIp, WanPort, <<?WAN_CONN:8>>),
-    io:format("p2p_conn, wan, wanip:~w, wanport:~w~n", [WanIp, WanPort]),
+    io:format("send p2p_conn wan, wanip:~w, wanport:~w~n", [WanIp, WanPort]),
     lists:foreach(fun(LIp) ->
-                io:format("p2p_conn, lan, lanip:~w, lanport:~w~n", [LIp, LanPort]),
+                io:format("send p2p_conn lan, lanip:~w, lanport:~w~n", [LIp, LanPort]),
                 gen_udp:send(Socket, LIp, LanPort, <<?LAN_CONN:8>>)
         end, LanIpList).
 
