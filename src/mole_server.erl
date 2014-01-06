@@ -35,7 +35,7 @@ handle_cast(_Request, State) ->
 handle_info({get_work, WorkerPid} = Info, Socket) ->
     case gen_udp:recv(Socket, 0) of
         {ok, {Addr, Port, Packet}} ->
-            WorkerPid ! {work, Socket, {Addr, Port, Packet}};
+            WorkerPid ! {work, {Addr, Port, Packet}};
         _ ->
             self() ! Info
     end,
