@@ -2,30 +2,28 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--export([start/3]).
+-export([start/5]).
 
 -behaviour(gen_server).
 
--record(state, {socket, conn, my_lan, his_net, his_key, my_packet}).
+-record(state, {socket, s_ip, s_port, conn, my_lan, his_net, his_key, my_packet}).
 
--define(SERVER_IP, {192,168,1,2}).
--define(SERVER_PORT, 6666).
 -define(SERVER_REQ, 1).
 -define(SERVER_RES, 2).
 -define(WAN_CONN, 3).
 -define(LAN_CONN, 4).
 -define(P2P_DATA, 5).
 
-start(MyKey, HisKey, Port) ->
-    gen_server:start({local, ?MODULE}, ?MODULE, [MyKey, HisKey, Port], []).
+start(MyKey, HisKey, Port, ServerIp, ServerPort) ->
+    gen_server:start({local, ?MODULE}, ?MODULE, [MyKey, HisKey, Port, ServerIp, ServerPort], []).
 
-init([MyKey, HisKey, Port]) ->
+init([MyKey, HisKey, Port, ServerIp, ServerPort]) ->
     {ok, Socket} = gen_udp:open(Port, [binary]),
     IpList = get_local_ip(),
     LanBin = term_to_binary({IpList, Port}),
     MyPacket = <<?SERVER_REQ:8, MyKey:128, HisKey:128, LanBin/binary>>,
     erlang:send_after(1000, self(), server_req),
-    {ok, #state{socket = Socket, my_lan = {IpList, Port}, my_packet = MyPacket}}.
+    {ok, #state{socket = Socket, s_ip = ServerIp, s_port = ServerPort, my_lan = {IpList, Port}, my_packet = MyPacket}}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -78,11 +76,11 @@ handle_info({udp, _Socket, Ip, _Port, Packet}, State) ->
     {noreply, State};
 
 %% server request
-handle_info(server_req, #state{socket = Socket, his_net = HisNet, my_packet = MyPacket} = State) ->
-    case HisNet of
+handle_info(server_req, State) ->
+    case State#state.his_net of
         undefined ->
             erlang:send_after(1000, self(), server_req),
-            gen_udp:send(Socket, ?SERVER_IP, ?SERVER_PORT, MyPacket);
+            gen_udp:send(State#state.socket, State#state.s_ip, State#state.s_port, State#state.my_packet);
         _ ->
             ignore
     end,

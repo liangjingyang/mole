@@ -12,7 +12,8 @@
 	{mod, {mole, []}},
 
 	{env, [
-            {worker_num, 10}
+            {worker_num, 10},
+            {port, 6666}
             ]
         }
 ]}.

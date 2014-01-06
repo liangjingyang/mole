@@ -5,22 +5,24 @@
 -behaviour(gen_server).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
--export([start/0]).
+-export([start_link/0]).
 
 
--define(UDP_PORT, 6666).
+-include("mole.hrl").
 
-start() ->
+start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init([]) ->
-    {ok, Socket} = gen_udp:open(?UDP_PORT, [{active, false}, binary]),
+    {ok, Port} = application:get_env(?APP, port),
+    {ok, Socket} = gen_udp:open(Port, [{active, false}, binary]),
     Server = self(),
-    insert_server_pid(Server),
     case worker_go(Server, Socket) of
         no_worker ->
+            io:format("error, no_worker~n", []),
             {stop, no_worker};
         ok ->
+            insert_server_pid(Server),
             {ok, Socket}
     end.
 
@@ -51,13 +53,13 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 insert_server_pid(Server) ->
-    ets:insert(ets_mole, {server, Server}).
+    ets:insert(?ETS_MOLE, {server, Server}).
 
 delete_server_pid() ->
-    ets:delete(ets_mole, server).
+    ets:delete(?ETS_MOLE, server).
 
 worker_go(Server, Socket) ->
-    case ets:lookup(ets_mole, worker) of
+    case ets:lookup(?ETS_MOLE, worker) of
         [] ->
             no_worker; 
         [{worker, Workers}] ->
