@@ -82,7 +82,8 @@ handle_info({udp, _Socket, Ip, Port, <<?WAN_CONN:8>>}, State) ->
     {noreply, State2};
 
 %% server response
-handle_info({udp, _Socket, _Ip, _Port, <<?SERVER_RES:8, HisKey:128/bitstring, Ip:32, WanPort:16, Packet/binary>>}, State) ->
+handle_info({udp, _Socket, _Ip, _Port, 
+        <<?SERVER_RES:8, HisKey:128/bitstring, Ip:32/bitstring, WanPort:16, Packet/binary>>}, State) ->
     <<I1:8, I2:8, I3:8, I4:8>> = Ip,
     WanIp = {I1, I2, I3, I4},
     LanArgs = binary_to_term(Packet),
