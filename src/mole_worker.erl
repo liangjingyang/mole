@@ -51,7 +51,7 @@ code_change(_OldVsn, State, _Extra) ->
 get_work(Server) ->
     Server ! {get_work, self()}.
 
-do_work(Socket, {MyAddr, MyPort, <<?SERVER_REQ:8, MyKey:128, HisKey:128, MyPacket/binary>>}) ->
+do_work(Socket, {MyAddr, MyPort, <<?SERVER_REQ:8, MyKey:128/bitstring, HisKey:128/bitstring, MyPacket/binary>>}) ->
     MyEtsKey = #key{my_key = MyKey, his_key = HisKey},
     HisEtsKey = #key{my_key = HisKey, his_key = MyKey},
     MyAddrBin = ip_tup2bin(MyAddr),
@@ -63,9 +63,9 @@ do_work(Socket, {MyAddr, MyPort, <<?SERVER_REQ:8, MyKey:128, HisKey:128, MyPacke
             ets:insert(?ETS_MOLE, {MyEtsKey, Now, MyAddr, MyPort, MyPacketBin});
         [{_, _, HisAddr, HisPort, HisPacketBin}] ->
             %% to he
-            gen_udp:send(Socket, HisAddr, HisPort, <<?SERVER_RES:8, MyKey:128, MyPacketBin/binary>>),
+            gen_udp:send(Socket, HisAddr, HisPort, <<?SERVER_RES:8, MyKey/binary, MyPacketBin/binary>>),
             %% to me
-            gen_udp:send(Socket, MyAddr, MyPort, <<?SERVER_RES:8, HisKey:128, HisPacketBin/binary>>),
+            gen_udp:send(Socket, MyAddr, MyPort, <<?SERVER_RES:8, HisKey/binary, HisPacketBin/binary>>),
             ets:delete(?ETS_MOLE, MyEtsKey),
             ets:delete(?ETS_MOLE, HisEtsKey)
     end.

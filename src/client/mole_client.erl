@@ -82,7 +82,7 @@ handle_info({udp, _Socket, Ip, Port, <<?WAN_CONN:8>>}, State) ->
     {noreply, State2};
 
 %% server response
-handle_info({udp, _Socket, _Ip, _Port, <<?SERVER_RES:8, HisKey:128, Ip:32, WanPort:16, Packet/binary>>}, State) ->
+handle_info({udp, _Socket, _Ip, _Port, <<?SERVER_RES:8, HisKey:128/bitstring, Ip:32, WanPort:16, Packet/binary>>}, State) ->
     <<I1:8, I2:8, I3:8, I4:8>> = Ip,
     WanIp = {I1, I2, I3, I4},
     LanArgs = binary_to_term(Packet),
@@ -110,12 +110,12 @@ handle_info({udp, Socket, Ip, Port, <<?BCAST_CONN:8, HisKey:128/bitstring, MyKey
                     case State#state.conn_type of
                         undefined ->
                             State2 = State#state{conn = {Ip, Port}, conn_type = ?BCAST_CONN},
-                            gen_udp:send(Socket, Ip, Port, <<?BCAST_CONN:8, MyKey:128/bitstring, HisKey:128/bitstring>>),
+                            gen_udp:send(Socket, Ip, Port, <<?BCAST_CONN:8, MyKey/binary, HisKey/binary>>),
                             io:format("recv connect from bcast, ~w~n", [{Ip, Port}]), 
                             erlang:send_after(3 * 1000, self(), heartbeat);
                         ?WAN_CONN ->
                             State2 = State#state{conn = {Ip, Port}, conn_type = ?BCAST_CONN},
-                            gen_udp:send(Socket, Ip, Port, <<?BCAST_CONN:8, MyKey:128/bitstring, HisKey:128/bitstring>>),
+                            gen_udp:send(Socket, Ip, Port, <<?BCAST_CONN:8, MyKey/binary, HisKey/binary>>),
                             io:format("recv connect from bcast, ~w~n", [{Ip, Port}]);
                         _ ->
                             State2 = State
