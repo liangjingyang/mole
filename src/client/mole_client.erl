@@ -109,12 +109,12 @@ handle_info({udp, Socket, Ip, Port, <<?BCAST_CONN:8, HisKey:128/bitstring, MyKey
                 true ->
                     case State#state.conn_type of
                         undefined ->
-                            State2 = State#state{conn = {Ip, Port}},
+                            State2 = State#state{conn = {Ip, Port}, conn_type = ?BCAST_CONN},
                             gen_udp:send(Socket, Ip, Port, <<?BCAST_CONN:8, MyKey:128/bitstring, HisKey:128/bitstring>>),
                             io:format("recv connect from bcast, ~w~n", [{Ip, Port}]), 
                             erlang:send_after(3 * 1000, self(), heartbeat);
                         ?WAN_CONN ->
-                            State2 = State#state{conn = {Ip, Port}},
+                            State2 = State#state{conn = {Ip, Port}, conn_type = ?BCAST_CONN},
                             gen_udp:send(Socket, Ip, Port, <<?BCAST_CONN:8, MyKey:128/bitstring, HisKey:128/bitstring>>),
                             io:format("recv connect from bcast, ~w~n", [{Ip, Port}]);
                         _ ->
