@@ -27,8 +27,8 @@ init([MyKey, HisKey, Port, ServerIp, ServerPort]) ->
     MyKey128 = key_to_128(MyKey),
     HisKey128 = key_to_128(HisKey),
     MyPacket = <<?SERVER_REQ:8, MyKey128/binary, HisKey128/binary, LanBin/binary>>,
-    erlang:send_after(1000, self(), server_req),
-    erlang:send_after(1000, self(), bcast_conn),
+    erlang:send_after(3 * 1000, self(), server_req),
+    erlang:send_after(1 * 1000, self(), bcast_conn),
     {ok, #state{socket = Socket, s_ip = ServerIp, 
             s_port = ServerPort, my_lan = {IpList, Port}, 
             my_port = Port, my_packet = MyPacket,
@@ -77,7 +77,7 @@ handle_info({udp, _Socket, _Ip, _Port, <<?SERVER_RES:8, HisKey:128, Ip:32, WanPo
     LanArgs = binary_to_term(Packet),
     io:format("begin to make hole with ~w~n", [HisKey]),
     p2p_conn(State#state.socket, {WanIp, WanPort, LanArgs}),
-    erlang:send_after(2* 1000, self(), p2p_conn),
+    erlang:send_after(2 * 1000, self(), p2p_conn),
     {noreply, State#state{his_net = {WanIp, WanPort, LanArgs}, his_key = HisKey}};
 
 
@@ -87,11 +87,13 @@ handle_info({udp, _Socket, Ip, Port, <<?P2P_DATA:8, Packet/binary>>}, State) ->
     {noreply, State};
 
 %% recv bcast conn
-handle_info({udp, _Socket, Ip, Port, <<?BCAST_CONN:8, HisKey:128, MyKey:128>>}, State) ->
+handle_info({udp, _Socket, Ip, Port, <<?BCAST_CONN:8, HisKey:128/bitstring, MyKey:128/bitstring>>}, State) ->
     case State#state.my_key =:= HisKey of
         true ->
+            %io:format("recv bcast conn from myself~n", []),
             State2 = State;
         false ->
+            %io:format("recv bcast conn from him ~w ~w ~w~n", [State#state.my_key, MyKey, HisKey]),
             case State#state.my_key =:= MyKey of
                 true ->
                     State2 = State#state{conn = {Ip, Port}},
@@ -109,6 +111,7 @@ handle_info(bcast_conn, State) ->
         undefined ->
             erlang:send_after(1000, self(), bcast_conn),
             BcastBin = <<?BCAST_CONN:8, (State#state.my_key)/binary, (State#state.his_key)/binary>>,
+            %io:format("send bcast conn ~w~n", [BcastBin]),
             gen_udp:send(State#state.socket, {255, 255, 255, 255}, State#state.my_port, BcastBin);
         _ ->
             ignore
@@ -184,9 +187,9 @@ get_ip_from_os(Cmd) ->
 
 p2p_conn(Socket, {WanIp, WanPort, {LanIpList, LanPort}}) ->
     gen_udp:send(Socket, WanIp, WanPort, <<?WAN_CONN:8>>),
-    io:format("send p2p_conn wan, wanip:~w, wanport:~w~n", [WanIp, WanPort]),
+    %io:format("send p2p_conn wan, wanip:~w, wanport:~w~n", [WanIp, WanPort]),
     lists:foreach(fun(LIp) ->
-                io:format("send p2p_conn lan, lanip:~w, lanport:~w~n", [LIp, LanPort]),
+                %io:format("send p2p_conn lan, lanip:~w, lanport:~w~n", [LIp, LanPort]),
                 gen_udp:send(Socket, LIp, LanPort, <<?LAN_CONN:8>>)
         end, LanIpList).
 
