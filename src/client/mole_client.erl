@@ -15,7 +15,7 @@
 -define(WAN_CONN, 3).
 -define(LAN_CONN, 4).
 -define(BCAST_CONN, 5).
--define(P2P_DATA, 6).
+-define(P2P_HEARTBEAT, 6).
 
 start(MyKey, HisKey, Port, ServerIp, ServerPort) ->
     gen_server:start({local, ?MODULE}, ?MODULE, [MyKey, HisKey, Port, ServerIp, ServerPort], []).
@@ -27,8 +27,7 @@ init([MyKey, HisKey, Port, ServerIp, ServerPort]) ->
     MyKey128 = key_to_128(MyKey),
     HisKey128 = key_to_128(HisKey),
     MyPacket = <<?SERVER_REQ:8, MyKey128/binary, HisKey128/binary, LanBin/binary>>,
-    erlang:send_after(3 * 1000, self(), server_req),
-    erlang:send_after(1 * 1000, self(), bcast_conn),
+    start_conn(),
     {ok, #state{socket = Socket, s_ip = ServerIp, 
             s_port = ServerPort, my_lan = {IpList, Port}, 
             my_port = Port, my_packet = MyPacket,
@@ -94,7 +93,7 @@ handle_info({udp, _Socket, _Ip, _Port,
 
 
 %% p2p data
-handle_info({udp, _Socket, Ip, Port, <<?P2P_DATA:8, Packet/binary>>}, State) ->
+handle_info({udp, _Socket, Ip, Port, <<?P2P_HEARTBEAT:8, Packet/binary>>}, State) ->
     io:format("recv p2p data from ip:~p port:~p packet: ~p~n", [Ip, Port, Packet]),
     {noreply, State};
 
@@ -129,7 +128,7 @@ handle_info({udp, Socket, Ip, Port, <<?BCAST_CONN:8, HisKey:128/bitstring, MyKey
 
 %% send bcast conn
 handle_info(bcast_conn, State) ->
-    case State#state.conn of
+    case State#state.conn_type of
         undefined ->
             erlang:send_after(1000, self(), bcast_conn),
             BcastBin = <<?BCAST_CONN:8, (State#state.my_key)/binary, (State#state.his_key)/binary>>,
@@ -144,8 +143,13 @@ handle_info(bcast_conn, State) ->
 handle_info(server_req, State) ->
     case State#state.his_net of
         undefined ->
-            erlang:send_after(1000, self(), server_req),
-            gen_udp:send(State#state.socket, State#state.s_ip, State#state.s_port, State#state.my_packet);
+            case State#state.conn_type of
+                undefined ->
+                    erlang:send_after(1000, self(), server_req),
+                    gen_udp:send(State#state.socket, State#state.s_ip, State#state.s_port, State#state.my_packet);
+                _ ->
+                    ignore
+            end;
         _ ->
             ignore
     end,
@@ -153,7 +157,7 @@ handle_info(server_req, State) ->
 
 %% p2p_conn
 handle_info(p2p_conn, State) ->
-    case State#state.conn of
+    case State#state.conn_type of
         undefined ->
             erlang:send_after(2 * 1000, self(), p2p_conn),
             p2p_conn(State#state.socket, State#state.his_net);
@@ -166,7 +170,7 @@ handle_info(p2p_conn, State) ->
 handle_info(heartbeat, State) ->
     erlang:send_after(3 * 1000, self(), heartbeat),
     {Ip, Port} = State#state.conn,
-    gen_udp:send(State#state.socket, Ip, Port, <<?P2P_DATA:8, <<"heartbeat">>/binary>>),
+    gen_udp:send(State#state.socket, Ip, Port, <<?P2P_HEARTBEAT:8>>),
     {noreply, State};
 
 handle_info(Info, State) ->
@@ -224,4 +228,9 @@ key_to_128(Key) ->
             <<Key2:128, _/binary>> = Key,
             Key2
     end.
+
+start_conn() ->
+    erlang:send_after(3 * 1000, self(), server_req),
+    erlang:send_after(1 * 1000, self(), bcast_conn),
+    ok.
             

@@ -6,7 +6,7 @@
 -define(WAN_CONN, 3).
 -define(LAN_CONN, 4).
 -define(BCAST_CONN, 5).
--define(P2P_DATA, 6).
+-define(P2P_HEARTBEAT, 6).
 
 -define(ETS_MOLE, ets_mole).
 
