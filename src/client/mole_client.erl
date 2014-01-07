@@ -8,7 +8,7 @@
 
 -behaviour(gen_server).
 
--record(state, {socket, s_ip, s_port, conn, my_lan, my_port, my_packet, my_key, his_key, his_net}).
+-record(state, {socket, s_ip, s_port, conn, conn_type, my_lan, my_port, my_packet, my_key, his_key, his_net}).
 
 -define(SERVER_REQ, 1).
 -define(SERVER_RES, 2).
@@ -47,9 +47,19 @@ handle_info({udp, _Socket, Ip, Port, <<?LAN_CONN:8>>}, State) ->
         undefined ->
             State2 = State;
         _His ->
-            State2 = State#state{conn = {Ip, Port}},
-            io:format("recv connect from lan, ~w~n", [{Ip, Port}]), 
-            erlang:send_after(3 * 1000, self(), heartbeat)
+            case State#state.conn_type of 
+                undefined ->
+                    State2 = State#state{conn = {Ip, Port}, conn_type = ?LAN_CONN},
+                    gen_tcp:send(State#state.socket, Ip, Port, <<?LAN_CONN:8>>),
+                    io:format("recv connect from lan, ~w~n", [{Ip, Port}]), 
+                    erlang:send_after(3 * 1000, self(), heartbeat);
+                ?WAN_CONN ->
+                    State2 = State#state{conn = {Ip, Port}, conn_type = ?LAN_CONN},
+                    gen_tcp:send(State#state.socket, Ip, Port, <<?LAN_CONN:8>>),
+                    io:format("recv connect from lan, ~w~n", [{Ip, Port}]);
+                _ ->
+                    State2 = State 
+            end
     end,
     {noreply, State2};
 
@@ -59,9 +69,10 @@ handle_info({udp, _Socket, Ip, Port, <<?WAN_CONN:8>>}, State) ->
         undefined ->
             State2 = State;
         _His ->
-            case State#state.conn of 
+            case State#state.conn_type of 
                 undefined ->
-                    State2 = State#state{conn = {Ip, Port}},
+                    State2 = State#state{conn = {Ip, Port}, conn_type = ?WAN_CONN},
+                    gen_tcp:send(State#state.socket, Ip, Port, <<?WAN_CONN:8>>),
                     io:format("recv connect from wan, ~w~n", [{Ip, Port}]), 
                     erlang:send_after(3 * 1000, self(), heartbeat);
                 _ ->
@@ -87,7 +98,7 @@ handle_info({udp, _Socket, Ip, Port, <<?P2P_DATA:8, Packet/binary>>}, State) ->
     {noreply, State};
 
 %% recv bcast conn
-handle_info({udp, _Socket, Ip, Port, <<?BCAST_CONN:8, HisKey:128/bitstring, MyKey:128/bitstring>>}, State) ->
+handle_info({udp, Socket, Ip, Port, <<?BCAST_CONN:8, HisKey:128/bitstring, MyKey:128/bitstring>>}, State) ->
     case State#state.my_key =:= HisKey of
         true ->
             %io:format("recv bcast conn from myself~n", []),
@@ -96,9 +107,19 @@ handle_info({udp, _Socket, Ip, Port, <<?BCAST_CONN:8, HisKey:128/bitstring, MyKe
             %io:format("recv bcast conn from him ~w ~w ~w~n", [State#state.my_key, MyKey, HisKey]),
             case State#state.my_key =:= MyKey of
                 true ->
-                    State2 = State#state{conn = {Ip, Port}},
-                    io:format("recv connect from bcast, ~w~n", [{Ip, Port}]), 
-                    erlang:send_after(3 * 1000, self(), heartbeat);
+                    case State#state.conn_type of
+                        undefined ->
+                            State2 = State#state{conn = {Ip, Port}},
+                            gen_udp:send(Socket, Ip, Port, <<?BCAST_CONN:8, MyKey:128/bitstring, HisKey:128/bitstring>>),
+                            io:format("recv connect from bcast, ~w~n", [{Ip, Port}]), 
+                            erlang:send_after(3 * 1000, self(), heartbeat);
+                        ?WAN_CONN ->
+                            State2 = State#state{conn = {Ip, Port}},
+                            gen_udp:send(Socket, Ip, Port, <<?BCAST_CONN:8, MyKey:128/bitstring, HisKey:128/bitstring>>),
+                            io:format("recv connect from bcast, ~w~n", [{Ip, Port}]);
+                        _ ->
+                            State2 = State
+                    end;
                 false ->
                     State2 = State
             end
