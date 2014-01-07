@@ -2,28 +2,37 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--export([start/5]).
+-export([start/5,
+        get_lan_ip/0
+    ]).
 
 -behaviour(gen_server).
 
--record(state, {socket, s_ip, s_port, conn, my_lan, his_net, his_key, my_packet}).
+-record(state, {socket, s_ip, s_port, conn, my_lan, my_port, my_packet, my_key, his_key, his_net}).
 
 -define(SERVER_REQ, 1).
 -define(SERVER_RES, 2).
 -define(WAN_CONN, 3).
 -define(LAN_CONN, 4).
--define(P2P_DATA, 5).
+-define(BCAST_CONN, 5).
+-define(P2P_DATA, 6).
 
 start(MyKey, HisKey, Port, ServerIp, ServerPort) ->
     gen_server:start({local, ?MODULE}, ?MODULE, [MyKey, HisKey, Port, ServerIp, ServerPort], []).
 
 init([MyKey, HisKey, Port, ServerIp, ServerPort]) ->
-    {ok, Socket} = gen_udp:open(Port, [binary]),
-    IpList = get_local_ip(),
+    {ok, Socket} = gen_udp:open(Port, [{broadcast, true}, binary]),
+    IpList = get_lan_ip(),
     LanBin = term_to_binary({IpList, Port}),
-    MyPacket = <<?SERVER_REQ:8, MyKey:128, HisKey:128, LanBin/binary>>,
+    MyKey128 = key_to_128(MyKey),
+    HisKey128 = key_to_128(HisKey),
+    MyPacket = <<?SERVER_REQ:8, MyKey128/binary, HisKey128/binary, LanBin/binary>>,
     erlang:send_after(1000, self(), server_req),
-    {ok, #state{socket = Socket, s_ip = ServerIp, s_port = ServerPort, my_lan = {IpList, Port}, my_packet = MyPacket}}.
+    erlang:send_after(1000, self(), bcast_conn),
+    {ok, #state{socket = Socket, s_ip = ServerIp, 
+            s_port = ServerPort, my_lan = {IpList, Port}, 
+            my_port = Port, my_packet = MyPacket,
+            my_key = MyKey128, his_key = HisKey128}}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -62,7 +71,8 @@ handle_info({udp, _Socket, Ip, Port, <<?WAN_CONN:8>>}, State) ->
     {noreply, State2};
 
 %% server response
-handle_info({udp, _Socket, _Ip, _Port, <<?SERVER_RES:8, HisKey:128, I1:8, I2:8, I3:8, I4:8, WanPort:16, Packet/binary>>}, State) ->
+handle_info({udp, _Socket, _Ip, _Port, <<?SERVER_RES:8, HisKey:128, Ip:32, WanPort:16, Packet/binary>>}, State) ->
+    <<I1:8, I2:8, I3:8, I4:8>> = Ip,
     WanIp = {I1, I2, I3, I4},
     LanArgs = binary_to_term(Packet),
     io:format("begin to make hole with ~w~n", [HisKey]),
@@ -71,8 +81,38 @@ handle_info({udp, _Socket, _Ip, _Port, <<?SERVER_RES:8, HisKey:128, I1:8, I2:8, 
     {noreply, State#state{his_net = {WanIp, WanPort, LanArgs}, his_key = HisKey}};
 
 
+%% p2p data
 handle_info({udp, _Socket, Ip, Port, <<?P2P_DATA:8, Packet/binary>>}, State) ->
     io:format("recv p2p data from ip:~p port:~p packet: ~p~n", [Ip, Port, Packet]),
+    {noreply, State};
+
+%% recv bcast conn
+handle_info({udp, _Socket, Ip, Port, <<?BCAST_CONN:8, HisKey:128, MyKey:128>>}, State) ->
+    case State#state.my_key =:= HisKey of
+        true ->
+            State2 = State;
+        false ->
+            case State#state.my_key =:= MyKey of
+                true ->
+                    State2 = State#state{conn = {Ip, Port}},
+                    io:format("recv connect from bcast, ~w~n", [{Ip, Port}]), 
+                    erlang:send_after(3 * 1000, self(), heartbeat);
+                false ->
+                    State2 = State
+            end
+    end,
+    {noreply, State2};
+
+%% send bcast conn
+handle_info(bcast_conn, State) ->
+    case State#state.conn of
+        undefined ->
+            erlang:send_after(1000, self(), bcast_conn),
+            BcastBin = <<?BCAST_CONN:8, (State#state.my_key)/binary, (State#state.his_key)/binary>>,
+            gen_udp:send(State#state.socket, {255, 255, 255, 255}, State#state.my_port, BcastBin);
+        _ ->
+            ignore
+    end,
     {noreply, State};
 
 %% server request
@@ -115,7 +155,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 
-get_local_ip() ->
+get_lan_ip() ->
     Ip192 = get_local_192(),
     Ip172 = get_local_172(),
     Ip10 = get_local_10(),
@@ -150,3 +190,13 @@ p2p_conn(Socket, {WanIp, WanPort, {LanIpList, LanPort}}) ->
                 gen_udp:send(Socket, LIp, LanPort, <<?LAN_CONN:8>>)
         end, LanIpList).
 
+key_to_128(Key) ->
+    Size = byte_size(Key),
+    case Size < 128 of
+        true ->
+            <<Key/binary, 0:(128 - Size * 8)>>;
+        false ->
+            <<Key2:128, _/binary>> = Key,
+            Key2
+    end.
+            

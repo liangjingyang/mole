@@ -5,7 +5,8 @@
 -define(SERVER_RES, 2).
 -define(WAN_CONN, 3).
 -define(LAN_CONN, 4).
--define(P2P_DATA, 5).
+-define(BCAST_CONN, 5).
+-define(P2P_DATA, 6).
 
 -define(ETS_MOLE, ets_mole).
 
