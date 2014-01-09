@@ -55,7 +55,7 @@ do_work(Socket, {MyAddr, MyPort, <<?SERVER_REQ, MyKey:128/bitstring, HisKey:128/
     MyEtsKey = #key{my_key = MyKey, his_key = HisKey},
     HisEtsKey = #key{my_key = HisKey, his_key = MyKey},
     MyAddrBin = ip_tup2bin(MyAddr),
-    MyPortBin = <<MyPort:16>>,
+    MyPortBin = port2bin(MyPort),
     MyPacketBin = <<MyAddrBin/binary, MyPortBin/binary, MyPacket/binary>>,
     case ets:lookup(?ETS_MOLE, HisEtsKey) of
         [] ->
@@ -89,4 +89,11 @@ delete_worker_pid(Pid) ->
 ip_tup2bin(IpTup) ->
     {A, B, C, D} = IpTup,
     <<A:8, B:8, C:8, D:8>>.
+
+port2bin(Port) ->
+    L = integer_to_list(Port),
+    L2 = lists:foldl(fun(_, Acc) ->
+                [$0|Acc]
+        end, L, lists:seq(1, 5 - length(L))),
+    list_to_binary(L2).
 
