@@ -88,12 +88,17 @@ delete_worker_pid(Pid) ->
 
 ip_tup2bin(IpTup) ->
     {A, B, C, D} = IpTup,
-    <<A:8, B:8, C:8, D:8>>.
+    IpStr = [int2str(A, 3), ".", int2str(B, 3), ".", int2str(C, 3), ".", int2str(D, 3)],
+    list_to_binary(IpStr).
 
 port2bin(Port) ->
-    L = integer_to_list(Port),
-    L2 = lists:foldl(fun(_, Acc) ->
+    Port2 = int2str(Port, 5),
+    list_to_binary(Port2).
+
+int2str(Int, Len) ->
+    L = integer_to_list(Int),
+    lists:foldl(fun(_, Acc) ->
                 [$0|Acc]
-        end, L, lists:seq(1, 5 - length(L))),
-    list_to_binary(L2).
+        end, L, lists:seq(1, Len - length(L))).
+
 
